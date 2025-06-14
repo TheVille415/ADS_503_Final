@@ -61,4 +61,45 @@ str(df)
 summary(df)
 ```
 
+## Exploratory Data Analysis (EDA)
+
+```{r}
+summary(df)
+str(df)
+```
+
+```{r}
+# Missing values visualization
+library(VIM)
+aggr(df, col=c('navyblue','red'), numbers=TRUE, sortVars=TRUE)
+
+```
+```{r}
+# Distributions of numeric variables
+library(ggplot2)
+ggplot(df, aes(x = age)) + 
+  geom_histogram(bins = 30, fill = "steelblue", color = "white")
+```
+
+```{r}
+# Corrlation heatmap
+library(corrplot)
+numeric_vars <- df[sapply(df, is.numeric)]
+cor_matrix <- cor(numeric_vars, use = "complete.obs")
+corrplot(cor_matrix, method = "color", type = "upper")
+
+# Boxplots by variable outcome
+ggplot(df, aes(x = factor(target), y = age)) + 
+  geom_boxplot()
+
+# Bar plots for categorical variables
+ggplot(df, aes(x = factor(cp))) + 
+  geom_bar(fill = "coral") +
+  labs(title = "Chest Pain Type")
+```
+```{r}
+# Boxplots by variable outcome
+ggplot(df, aes(x = factor(target), y = age)) + 
+  geom_boxplot()
+```
 
