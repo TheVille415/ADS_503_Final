@@ -1,9 +1,11 @@
 ---
 title: "R Notebook"
-output: html_notebook
+output:
+  html_document:
+    df_print: paged
 ---
 
-# Data preprocessing
+## Data preprocessing
 
 ```{r}
 ## Load and inspect data 
@@ -21,7 +23,7 @@ str(df)
 summary(df)
 ```
 
-## Handle missing data
+### Handle missing data
 
 ```{r}
 # Count missing values per column
@@ -72,8 +74,8 @@ str(df)
 # Missing values visualization
 library(VIM)
 aggr(df, col=c('navyblue','red'), numbers=TRUE, sortVars=TRUE)
-
 ```
+
 ```{r}
 # Distributions of numeric variables
 library(ggplot2)
@@ -82,24 +84,113 @@ ggplot(df, aes(x = age)) +
 ```
 
 ```{r}
-# Corrlation heatmap
-library(corrplot)
-numeric_vars <- df[sapply(df, is.numeric)]
-cor_matrix <- cor(numeric_vars, use = "complete.obs")
-corrplot(cor_matrix, method = "color", type = "upper")
+# Distribution of key numeric variables
+ggplot(df, aes(x = age)) +
+  geom_histogram(bins = 30, fill = "steelblue", color = "white") +
+  labs(title = "Age Distribution", x = "Age", y = "Count")
 
-# Boxplots by variable outcome
-ggplot(df, aes(x = factor(target), y = age)) + 
-  geom_boxplot()
+ggplot(df, aes(x = chol)) +
+  geom_histogram(bins = 30, fill = "darkgreen", color = "white") +
+  labs(title = "Cholesterol Distribution", x = "Cholesterol", y = "Count")
 
-# Bar plots for categorical variables
-ggplot(df, aes(x = factor(cp))) + 
+ggplot(df, aes(x = thalach)) +
+  geom_histogram(bins = 30, fill = "purple", color = "white") +
+  labs(title = "Max Heart Rate Distribution", x = "thalach", y = "Count")
+
+# Target variable distribution
+table(df$target)
+ggplot(df, aes(x = factor(target))) +
   geom_bar(fill = "coral") +
-  labs(title = "Chest Pain Type")
-```
-```{r}
-# Boxplots by variable outcome
-ggplot(df, aes(x = factor(target), y = age)) + 
-  geom_boxplot()
+  labs(title = "Heart Disease Outcome Distribution", x = "Target (0 = No, 1 = Yes)", y = "Count")
+
+# Boxplots of numeric variables by target
+ggplot(df, aes(x = factor(target), y = age)) +
+  geom_boxplot(fill = "lightblue") +
+  labs(title = "Age by Heart Disease Status", x = "Target", y = "Age")
+
+ggplot(df, aes(x = factor(target), y = thalach)) +
+  geom_boxplot(fill = "lightpink") +
+  labs(title = "Max Heart Rate by Heart Disease Status", x = "Target", y = "thalach")
+
+# Correlation heatmap of numeric variables
+numeric_vars <- df %>%
+  select_if(is.numeric)
+
+cor_matrix <- cor(numeric_vars, use = "complete.obs")
+corrplot(cor_matrix, method = "color", type = "upper", tl.cex = 0.8)
 ```
 
+## Train/Test Split and Model Building
+
+```{r}
+# Ensure target is a factor
+df$target <- as.factor(df$target)
+
+# Set seed for reproducibility
+set.seed(123)
+
+# Split data: 70% training, 30% testing
+trainIndex <- createDataPartition(df$target, p = 0.7, list = FALSE)
+train <- df[trainIndex, ]
+test <- df[-trainIndex, ]
+```
+
+### Logisitc regression model
+
+```{r}
+# Fit logistic regression model
+log_model <- glm(target ~ ., data = train, family = binomial)
+
+# Predict probabilities on the test set
+log_probs <- predict(log_model, newdata = test, type = "response")
+
+# Convert probabilities to class predictions (threshold = 0.5)
+log_preds <- ifelse(log_probs > 0.5, "1", "0")
+
+# Ensure both predicted and actual values are factors with the same levels
+log_preds <- factor(log_preds, levels = c("0", "1"))
+actual <- factor(test$target, levels = c("0", "1"))
+
+# Generate confusion matrix
+library(caret)
+confusionMatrix(log_preds, actual)
+```
+
+### Decision tree model
+
+```{r}
+### Decision Tree Model
+
+# Load required package
+library(rpart)
+
+# Fit decision tree model
+tree_model <- rpart(target ~ ., data = train, method = "class")
+
+# Predict class labels on test set
+tree_preds <- predict(tree_model, newdata = test, type = "class")
+
+# Convert predicted and actual labels to factors with consistent levels
+tree_preds <- factor(tree_preds, levels = c("0", "1"))
+actual <- factor(test$target, levels = c("0", "1"))
+
+# Evaluate using confusion matrix
+library(caret)
+confusionMatrix(tree_preds, actual)
+```
+
+### Random Forest Model
+
+```{r}
+# Random Forest
+rf_model <- randomForest(target ~ ., data = train, ntree = 100, importance = TRUE)
+
+# Predict
+rf_preds <- predict(rf_model, test)
+
+# Evaluation
+confusionMatrix(rf_preds, test$target)
+
+# Variable importance plot
+varImpPlot(rf_model)
+```
