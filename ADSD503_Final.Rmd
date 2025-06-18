@@ -1,5 +1,5 @@
 ---
-title: "R Notebook"
+title: "ADS503 Final Project"
 output:
   html_document:
     df_print: paged
@@ -17,6 +17,15 @@ df <- read.csv("~/Downloads/heart+disease/processed.cleveland.data",
 # Assign column names based on UCI documentation
 colnames(df) <- c("age", "sex", "cp", "trestbps", "chol", "fbs", "restecg",
                   "thalach", "exang", "oldpeak", "slope", "ca", "thal", "target")
+
+# Identify numeric columns
+numeric_cols <- sapply(df, is.numeric)
+
+# Convert target to numeric
+df$target <- as.numeric(as.character(df$target))
+
+# Scale numeric variables
+df[numeric_cols] <- scale(df[numeric_cols])
 
 # View structure and summary
 str(df)
@@ -43,7 +52,10 @@ df$thal <- ifelse(is.na(df$thal), impute_mode(df$thal), df$thal)
 ```{r}
 # Binarize the 'target' variable: 0 = No Disease, 1–4 = Disease
 df$target <- ifelse(df$target == 0, 0, 1)
-df$target <- factor(df$target, levels = c(0, 1), labels = c("No Disease", "Disease"))
+df$target <- factor(df$target, levels = c(0, 1),
+                    labels = c("No_Disease", "Disease"))
+
+print(table(df$target))
 ```
 
 ```{r}
@@ -123,16 +135,42 @@ corrplot(cor_matrix, method = "color", type = "upper", tl.cex = 0.8)
 ## Train/Test Split and Model Building
 
 ```{r}
-# Ensure target is a factor
-df$target <- as.factor(df$target)
+library(caret)
 
-# Set seed for reproducibility
+# Load dataset
+df <- read.csv("~/Downloads/heart+disease/processed.cleveland.data", 
+               header = FALSE, na.strings = "?")
+
+# Assign column names
+colnames(df) <- c("age", "sex", "cp", "trestbps", "chol", "fbs", "restecg",
+                  "thalach", "exang", "oldpeak", "slope", "ca", "thal", "target")
+
+# Drop rows with missing values
+df <- df[!is.na(df$target), ]
+
+# inarize the target (must be done BEFORE scaling)
+df$target <- as.numeric(as.character(df$target))
+df$target <- ifelse(df$target == 0, 0, 1)
+
+# Convert target to factor
+df$target <- factor(df$target, levels = c(0, 1), labels = c("No Disease", "Disease"))
+
+# Scale numeric predictors (excluding the target)
+predictor_cols <- setdiff(names(df), "target")
+df[predictor_cols] <- scale(df[predictor_cols])
+
+# Stratified train-test split
 set.seed(123)
+train_index <- createDataPartition(df$target, p = 0.7, list = FALSE)
+train <- df[train_index, ]
+test <- df[-train_index, ]
 
-# Split data: 70% training, 30% testing
-trainIndex <- createDataPartition(df$target, p = 0.7, list = FALSE)
-train <- df[trainIndex, ]
-test <- df[-trainIndex, ]
+# Confirm class distributions
+cat("Training set class distribution:\n")
+print(prop.table(table(train$target)))
+
+cat("\nTesting set class distribution:\n")
+print(prop.table(table(test$target)))
 ```
 
 ### Logisitc regression model
@@ -193,4 +231,106 @@ confusionMatrix(rf_preds, test$target)
 
 # Variable importance plot
 varImpPlot(rf_model)
+```
+### Support Vector Machine
+
+```{r}
+# Load required libraries
+library(e1071)
+library(caret)
+
+# Ensure target is a factor
+df$target <- as.factor(df$target)
+
+# Check for any missing values in full dataset
+colSums(is.na(df))
+
+# Drop rows with missing values (safe for modeling)
+df_clean <- na.omit(df)
+
+# Re-split cleaned dataset into training and testing
+set.seed(123)
+splitIndex <- createDataPartition(df_clean$target, p = 0.7, list = FALSE)
+train <- df_clean[splitIndex, ]
+test <- df_clean[-splitIndex, ]
+
+# Confirm no missing values
+stopifnot(!any(is.na(train)), !any(is.na(test)))
+
+# Train linear SVM
+svm_model <- svm(target ~ ., data = train, kernel = "linear", probability = TRUE)
+
+# Predict class labels
+svm_preds <- predict(svm_model, newdata = test)
+
+# Align factor levels
+svm_preds <- factor(svm_preds, levels = levels(test$target))
+test_target <- factor(test$target, levels = levels(test$target))
+
+# Ensure lengths match
+stopifnot(length(svm_preds) == length(test_target))
+
+# Evaluate
+confusionMatrix(svm_preds, test_target)
+```
+
+### k-Nearest Neighbours
+
+```{r}
+# Load necessary library
+library(class)
+library(caret)
+
+# Prepare data: separate predictors and target
+train_x <- train[, setdiff(names(train), "target")]
+test_x <- test[, setdiff(names(test), "target")]
+train_y <- train$target
+test_y <- test$target
+
+# Convert predictors to numeric
+train_x <- data.frame(lapply(train_x, as.numeric))
+test_x <- data.frame(lapply(test_x, as.numeric))
+
+# Convert target to factor
+train_y <- factor(train_y, levels = c("No_Disease", "Disease"))
+test_y <- factor(test_y, levels = c("No_Disease", "Disease"))
+
+# Run k-NN classification (k = 5)
+knn_preds <- knn(train = train_x, test = test_x, cl = train_y, k = 5)
+
+# Evaluate model
+confusionMatrix(knn_preds, test_y)
+```
+
+```{r}
+# Load package
+library(gbm)
+library(caret)
+
+# Ensure target is numeric: 0 = No Disease, 1 = Disease
+train_gbm <- train
+test_gbm <- test
+train_gbm$target <- ifelse(train_gbm$target == "Disease", 1, 0)
+test_gbm$target <- ifelse(test_gbm$target == "Disease", 1, 0)
+
+# Train GBM model
+set.seed(123)
+gbm_model <- gbm(target ~ ., 
+                 data = train_gbm, 
+                 distribution = "bernoulli", 
+                 n.trees = 100, 
+                 interaction.depth = 3, 
+                 cv.folds = 5, 
+                 verbose = FALSE)
+
+# Predict probabilities on test set
+gbm_probs <- predict(gbm_model, test_gbm, n.trees = 100, type = "response")
+
+# Convert probabilities to binary class predictions
+gbm_preds <- ifelse(gbm_probs > 0.5, 1, 0)
+gbm_preds <- factor(gbm_preds, levels = c(0, 1))
+actual <- factor(test_gbm$target, levels = c(0, 1))
+
+# Evaluate model performance
+confusionMatrix(gbm_preds, actual)
 ```
