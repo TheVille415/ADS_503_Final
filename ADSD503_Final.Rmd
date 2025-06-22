@@ -1,171 +1,289 @@
 ---
 title: "ADS503 Final Project"
+author: "Saloni Barhate and Jordan Torres"
+date: "`r Sys.Date()`"
 output:
+  pdf_document: default
   html_document:
     df_print: paged
 ---
 
 ## Data preprocessing
-
 ```{r}
-## Load and inspect data 
+# Library Imports for Knit 
+library(tidyverse)
+library(corrplot)
 
 # Load dataset with NA encoded as '?'
-df <- read.csv("~/Downloads/heart+disease/processed.cleveland.data", 
-               header = FALSE, na.strings = "?")
+df <- read.csv("/Users/Jordan/Documents/USD/Summer 2025/Final 503/ADS_503_Final_SB/heart+disease/processed.cleveland.data",
+header = FALSE, na.strings = "?")
 
 # Assign column names based on UCI documentation
 colnames(df) <- c("age", "sex", "cp", "trestbps", "chol", "fbs", "restecg",
                   "thalach", "exang", "oldpeak", "slope", "ca", "thal", "target")
-
-# Identify numeric columns
-numeric_cols <- sapply(df, is.numeric)
-
-# Convert target to numeric
-df$target <- as.numeric(as.character(df$target))
-
-# Scale numeric variables
-df[numeric_cols] <- scale(df[numeric_cols])
-
-# View structure and summary
 str(df)
 summary(df)
 ```
 
-### Handle missing data
+## A histogram to see the distribution of age column
+```{r}
+library(ggplot2)
+
+ggplot(df, aes(x = age)) +
+  geom_histogram(binwidth = 5, fill = "lightblue", color = "black") +
+  labs(title = "Distribution of Age", x = "Age", y = "Count")
+```
+
+## The mean, median and mode of age column - median is red, mode is blue, mean is green
+```{r}
+# Calculate stats
+mean_age <- mean(df$age)
+median_age <- median(df$age)
+mode_age <- as.numeric(names(sort(table(df$age), decreasing = TRUE))[1])  # get mode
+
+ggplot(df, aes(x = age)) +
+  geom_histogram(binwidth = 5, fill = "gray80", color = "black") +
+  geom_vline(aes(xintercept = mean_age), color = "green", linetype = "dashed", size = 1) +
+  geom_vline(aes(xintercept = median_age), color = "red", linetype = "dashed", size = 1) +
+  geom_vline(aes(xintercept = mode_age), color = "blue", linetype = "dashed", size = 1) +
+  labs(title = "Age Distribution with Mean, Median, and Mode",
+       x = "Age", y = "Count")
+```
+
+# Error getting the sex value to load, so we are loading the data again to get the sex column loaded
+```{r}
+# Re-import only the sex column from the file
+df_raw <- read.csv("/Users/Jordan/Documents/USD/Summer 2025/Final 503/ADS_503_Final_SB/heart+disease/processed.cleveland.data",
+                   header = FALSE, na.strings = "?")
+
+# Replace just the sex column
+df$sex <- df_raw[[2]]
+```
 
 ```{r}
-# Count missing values per column
-sapply(df, function(x) sum(is.na(x)))
+# Check values
+unique(df$sex)  # Should show 0 and 1
 
+# Convert to factor with labels
+df$sex <- factor(df$sex, levels = c(0, 1), labels = c("Female", "Male"))
+
+# Confirm it's working
+table(df$sex)
+```
+# Histogram of age column and coloring by sex
+```{r}
+ggplot(df, aes(x = age, fill = sex)) +
+  geom_histogram(binwidth = 5, color = "black", position = "stack") +
+  labs(title = "Age Distribution by Sex",
+       x = "Age",
+       y = "Count",
+       fill = "Sex") +
+  theme_minimal()
+```
+This histogram of patient age by sex revealed a close to normal distribution centered between 50 and 60 years. Male participants (n = 206) comprised the majority of the sample, with female participants (n = 97) making up a smaller proportion. Across all age groups, males outnumbered females. However, the distribution pattern was similar for both sexes, with the highest frequency occurring in the 55–60 age range. This demographic skew may influence model training outcomes.
+
+## Let's explore cp (Chest Pain) column
+# From the dataset website we know that CP is chest pain type
+        -- Value 1: typical angina
+        -- Value 2: atypical angina
+        -- Value 3: non-anginal pain
+        -- Value 4: asymptomatic
+```{r}
+df$cp <- factor(df$cp,
+                levels = c(0, 1, 2, 3),
+                labels = c("Typical angina ", "Atypical angina", "Non-anginal", "Asymptomatic"))
+table(df$cp)
+```
+In the dataset, no participants reported experiencing typical angina. The majority of individuals were classified as having asymptomatic chest pain (n = 86), followed by non-anginal pain (n = 50), and atypical angina (n = 23). This distribution suggests that the dataset is heavily skewed toward cases with less classic chest pain presentations.
+
+```{r}
+# visually explore how chest pain type relates to heart disease diagnosis
+# Drop NAs in cp before plotting
+df_cp <- df[!is.na(df$cp), ]
+
+# Plot with improved formatting
+ggplot(df_cp, aes(x = cp, fill = factor(target))) +
+  geom_bar(position = "fill") +
+  labs(title = "Proportion of Heart Disease by Chest Pain Type",
+       x = "Chest Pain Type", 
+       y = "Proportion",
+       fill = "Diagnosis Level") + #num	or Target = diagnosis of heart disease
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set2")  # optional: nicer colors
+```
+## Explore the resting blood pressure (trestbps) column
+```{r}
+df_clean <- df[df$trestbps > 0, ]  # remove invalid BP values
+summary(df_clean$trestbps)
+```
+
+```{r}
+# Histogram of the trestbps column
+ggplot(df_clean, aes(x = trestbps)) +
+  geom_histogram(binwidth = 5, fill = "lightblue", color = "black") +
+  labs(title = "Distribution of Resting Blood Pressure (trestbps)",
+       x = "Resting Blood Pressure (mm Hg)",
+       y = "Count") +
+  theme_minimal()
+```
+This histogram of resting blood pressure values (trestbps) revealed a distribution centered around 130 mm Hg, with most patients falling between 120 and 140 mm Hg. The mean resting blood pressure was 131.7 mm Hg, slightly above the clinical norm of 120 mm Hg. A small number of physiologically invalid entries (0 mm Hg) were removed from the analysis. The right-skewed distribution suggests elevated blood pressure in the sample, which aligns with the known association between hypertension and increased cardiovascular risk.
+
+### Handle Missing Data
+```{r}
+# Count of missing values per column
+colSums(is.na(df))
+```
+### New dataframe for cleaning data
+```{r}
+# Create a copy of the original dataframe
+df_model <- df
+```
+
+```{r}
+# Identify numeric columns EXCEPT 'target'
+numeric_cols <- names(df_model)[sapply(df_model, is.numeric) & names(df_model) != "target"]
+
+# Convert target to numeric
+df_model$target <- as.numeric(as.character(df_model$target))
+
+# Scale numeric variables (excluding 'target')
+df_model[numeric_cols] <- scale(df_model[numeric_cols])
+
+# View structure and summary
+str(df_model)
+summary(df_model)
+```
+### Since cp has 144 missing values out of 303 (~47.5%), we are going to impute cp using mode. This may have some bias toward the most frequent class.
+```{r}
 # Define mode imputation function
 impute_mode <- function(x) {
   ux <- unique(x[!is.na(x)])
   ux[which.max(tabulate(match(x, ux)))]
 }
+ 
+# Precompute mode for each column 
+cp_mode   <- impute_mode(df_model$cp)
+ca_mode   <- impute_mode(df_model$ca)
+thal_mode <- impute_mode(df_model$thal)
 
-# Impute 'ca' and 'thal' (categorical variables with missing values)
-df$ca <- ifelse(is.na(df$ca), impute_mode(df$ca), df$ca)
-df$thal <- ifelse(is.na(df$thal), impute_mode(df$thal), df$thal)
+# Apply mode imputation
+df_model$cp   <- ifelse(is.na(df_model$cp), cp_mode, df_model$cp)
+df_model$ca   <- ifelse(is.na(df_model$ca), ca_mode, df_model$ca)
+df_model$thal <- ifelse(is.na(df_model$thal), thal_mode, df_model$thal)
+
+# Count missing values per column
+sapply(df_model, function(x) sum(is.na(x)))
 ```
 
+### Binarizing the target variable for classification
+In order to make this work, we needed to exclude 'target'. The original code would transform target into a Z scale score and would not be able to be converted into binary.
 ```{r}
 # Binarize the 'target' variable: 0 = No Disease, 1–4 = Disease
-df$target <- ifelse(df$target == 0, 0, 1)
-df$target <- factor(df$target, levels = c(0, 1),
-                    labels = c("No_Disease", "Disease"))
 
-print(table(df$target))
+# Convert 'target' to numeric if needed
+df_model$target <- as.numeric(as.character(df_model$target))
+
+# Binarize target: 0 = No Disease, 1–4 = Disease
+df_model$target <- ifelse(df_model$target == 0, 0, 1)
+
+# Convert to factor with labels
+df_model$target <- factor(df_model$target, levels = c(0, 1),
+                          labels = c("No_Disease", "Disease"))
+
+# Confirm results
+print(table(df_model$target))
 ```
+
 
 ```{r}
 # Normalize numerical features
-
 library(caret)
 
-# Identify numeric columns
+# Identify numeric columns to scale
 num_vars <- c("age", "trestbps", "chol", "thalach", "oldpeak")
 
-# Apply standardization (center + scale)
-preproc <- preProcess(df[, num_vars], method = c("center", "scale"))
-df[, num_vars] <- predict(preproc, df[, num_vars])
+# Apply standardization (z-score normalization)
+preproc <- preProcess(df_model[, num_vars], method = c("center", "scale"))
+df_model[, num_vars] <- predict(preproc, df_model[, num_vars])
 
-# Confirm structure and summary statistics post-processing
-str(df)
-summary(df)
+# Confirm structure and summary
+str(df_model)
+summary(df_model)
 ```
 
-## Exploratory Data Analysis (EDA)
+## Exploratory Data Analysis (EDA) Post Clean
 
 ```{r}
-summary(df)
-str(df)
+summary(df_model)
+str(df_model)
 ```
 
 ```{r}
 # Missing values visualization
 library(VIM)
-aggr(df, col=c('navyblue','red'), numbers=TRUE, sortVars=TRUE)
-```
-
-```{r}
-# Distributions of numeric variables
-library(ggplot2)
-ggplot(df, aes(x = age)) + 
-  geom_histogram(bins = 30, fill = "steelblue", color = "white")
+aggr(df_model, col=c('navyblue','red'), numbers=TRUE, sortVars=TRUE)
 ```
 
 ```{r}
 # Distribution of key numeric variables
-ggplot(df, aes(x = age)) +
+ggplot(df_model, aes(x = age)) +
   geom_histogram(bins = 30, fill = "steelblue", color = "white") +
   labs(title = "Age Distribution", x = "Age", y = "Count")
 
-ggplot(df, aes(x = chol)) +
+ggplot(df_model, aes(x = chol)) +
   geom_histogram(bins = 30, fill = "darkgreen", color = "white") +
   labs(title = "Cholesterol Distribution", x = "Cholesterol", y = "Count")
 
-ggplot(df, aes(x = thalach)) +
+ggplot(df_model, aes(x = thalach)) +
   geom_histogram(bins = 30, fill = "purple", color = "white") +
   labs(title = "Max Heart Rate Distribution", x = "thalach", y = "Count")
 
 # Target variable distribution
-table(df$target)
-ggplot(df, aes(x = factor(target))) +
+table(df_model$target)
+ggplot(df_model, aes(x = factor(target))) +
   geom_bar(fill = "coral") +
   labs(title = "Heart Disease Outcome Distribution", x = "Target (0 = No, 1 = Yes)", y = "Count")
 
 # Boxplots of numeric variables by target
-ggplot(df, aes(x = factor(target), y = age)) +
+ggplot(df_model, aes(x = factor(target), y = age)) +
   geom_boxplot(fill = "lightblue") +
   labs(title = "Age by Heart Disease Status", x = "Target", y = "Age")
 
-ggplot(df, aes(x = factor(target), y = thalach)) +
+ggplot(df_model, aes(x = factor(target), y = thalach)) +
   geom_boxplot(fill = "lightpink") +
   labs(title = "Max Heart Rate by Heart Disease Status", x = "Target", y = "thalach")
 
 # Correlation heatmap of numeric variables
-numeric_vars <- df %>%
+numeric_vars <- df_model %>%
   select_if(is.numeric)
 
 cor_matrix <- cor(numeric_vars, use = "complete.obs")
 corrplot(cor_matrix, method = "color", type = "upper", tl.cex = 0.8)
 ```
 
-## Train/Test Split and Model Building
+## Train/Test Split and Model Building - Waiting to look over with changed dataset
 
 ```{r}
+# Load required library
 library(caret)
 
-# Load dataset
-df <- read.csv("~/Downloads/heart+disease/processed.cleveland.data", 
-               header = FALSE, na.strings = "?")
+# Identify the numeric predictor columns (excluding target)
+numeric_cols <- names(df_model)[sapply(df_model, is.numeric) & names(df_model) != "target"]
 
-# Assign column names
-colnames(df) <- c("age", "sex", "cp", "trestbps", "chol", "fbs", "restecg",
-                  "thalach", "exang", "oldpeak", "slope", "ca", "thal", "target")
-
-# Drop rows with missing values
-df <- df[!is.na(df$target), ]
-
-# inarize the target (must be done BEFORE scaling)
-df$target <- as.numeric(as.character(df$target))
-df$target <- ifelse(df$target == 0, 0, 1)
-
-# Convert target to factor
-df$target <- factor(df$target, levels = c(0, 1), labels = c("No Disease", "Disease"))
-
-# Scale numeric predictors (excluding the target)
-predictor_cols <- setdiff(names(df), "target")
-df[predictor_cols] <- scale(df[predictor_cols])
-
-# Stratified train-test split
+# Stratified Train/Test Split 
 set.seed(123)
-train_index <- createDataPartition(df$target, p = 0.7, list = FALSE)
-train <- df[train_index, ]
-test <- df[-train_index, ]
+train_index <- createDataPartition(df_model$target, p = 0.7, list = FALSE)
+train <- df_model[train_index, ]
+test <- df_model[-train_index, ]
 
-# Confirm class distributions
+# Standardize numeric predictors using preProcess on training data only
+preproc <- preProcess(train[, numeric_cols], method = c("center", "scale"))
+
+# Apply to both sets
+train[, numeric_cols] <- predict(preproc, train[, numeric_cols])
+test[, numeric_cols]  <- predict(preproc, test[, numeric_cols])
+
+# Confirm stratified target distribution
 cat("Training set class distribution:\n")
 print(prop.table(table(train$target)))
 
@@ -176,23 +294,26 @@ print(prop.table(table(test$target)))
 ### Logisitc regression model
 
 ```{r}
-# Fit logistic regression model
+# Logistic Regression Model (Binary Classification)
+
+# Fit the logistic regression model
 log_model <- glm(target ~ ., data = train, family = binomial)
 
 # Predict probabilities on the test set
 log_probs <- predict(log_model, newdata = test, type = "response")
 
-# Convert probabilities to class predictions (threshold = 0.5)
-log_preds <- ifelse(log_probs > 0.5, "1", "0")
+# Convert probabilities to binary class predictions (threshold = 0.5)
+log_preds <- ifelse(log_probs > 0.5, "Disease", "No_Disease")
 
-# Ensure both predicted and actual values are factors with the same levels
-log_preds <- factor(log_preds, levels = c("0", "1"))
-actual <- factor(test$target, levels = c("0", "1"))
+# Convert predictions and actuals to factors with consistent levels
+log_preds <- factor(log_preds, levels = c("No_Disease", "Disease"))
+actual    <- factor(test$target, levels = c("No_Disease", "Disease"))
 
 # Generate confusion matrix
-library(caret)
 confusionMatrix(log_preds, actual)
 ```
+
+The logistic regression model was trained to predict the presence of heart disease using clinical and demographic predictors. The model achieved an overall accuracy of 84.44%, significantly above the no-information rate of 54.44% (p < .001). Sensitivity was 85.71%, indicating strong performance in correctly identifying individuals without heart disease. Specificity was 82.93%, suggesting good classification of those with disease. The balanced accuracy was 84.32%, and Cohen’s kappa was 0.686, reflecting substantial agreement beyond chance.
 
 ### Decision tree model
 
@@ -202,60 +323,60 @@ confusionMatrix(log_preds, actual)
 # Load required package
 library(rpart)
 
-# Fit decision tree model
+# Fit decision tree model using the training data
 tree_model <- rpart(target ~ ., data = train, method = "class")
 
-# Predict class labels on test set
+# Predict class labels on test data
 tree_preds <- predict(tree_model, newdata = test, type = "class")
 
-# Convert predicted and actual labels to factors with consistent levels
-tree_preds <- factor(tree_preds, levels = c("0", "1"))
-actual <- factor(test$target, levels = c("0", "1"))
+# Convert predictions and actual labels to factors with matching levels
+tree_preds <- factor(tree_preds, levels = c("No_Disease", "Disease"))
+actual     <- factor(test$target, levels = c("No_Disease", "Disease"))
 
-# Evaluate using confusion matrix
-library(caret)
+# Evaluate model performance
 confusionMatrix(tree_preds, actual)
 ```
 
-### Random Forest Model
+The classification model achieved an overall accuracy of 71.11% (95% CI: 60.6%–80.2%), significantly higher than the no-information rate of 54.44%, p < .001. Sensitivity was strong at 83.67%, correctly identifying most patients without heart disease. However, specificity was lower (56.10%), suggesting reduced performance in identifying those with the condition. The model’s balanced accuracy was 69.89%, and Cohen’s kappa indicated moderate agreement beyond chance (k = 0.41).
 
+### Random Forest Model
 ```{r}
-# Random Forest
+# Load package
+library(randomForest)
+
+# Train Random Forest
+set.seed(123)  # for reproducibility
 rf_model <- randomForest(target ~ ., data = train, ntree = 100, importance = TRUE)
 
-# Predict
-rf_preds <- predict(rf_model, test)
+# Predict class labels on the test set
+rf_preds <- predict(rf_model, newdata = test)
 
-# Evaluation
-confusionMatrix(rf_preds, test$target)
+# Ensure predicted and actual values are factors with consistent levels
+rf_preds <- factor(rf_preds, levels = c("No_Disease", "Disease"))
+actual   <- factor(test$target, levels = c("No_Disease", "Disease"))
 
-# Variable importance plot
+# Evaluate model performance
+library(caret)
+confusionMatrix(rf_preds, actual)
+
+# Plot variable importance
 varImpPlot(rf_model)
 ```
-### Support Vector Machine
 
+The random forest model achieved an accuracy of 81.11% (95% CI: 71.5%–88.6%), significantly outperforming the no-information rate of 54.44% (p < .001). Sensitivity was high (87.76%), indicating strong performance in identifying patients without heart disease, while specificity was 73.17%, showing reasonable ability to detect those with the condition. The model’s balanced accuracy was 80.46%, and Cohen’s kappa (k = 0.62) suggested substantial agreement beyond chance. Variable importance analysis indicated that maximum heart rate (thalach), thalassemia status (thal), and number of colored vessels (ca) were the most influential features in prediction.
+
+### Support Vector Machine
 ```{r}
-# Load required libraries
+# Load necessary libraries
 library(e1071)
 library(caret)
 
-# Ensure target is a factor
-df$target <- as.factor(df$target)
+# Reuse preprocessed data (df_model) and stratified split (train/test)
+# Confirm target is factor (should already be, but good check)
+train$target <- factor(train$target, levels = c("No_Disease", "Disease"))
+test$target  <- factor(test$target, levels = c("No_Disease", "Disease"))
 
-# Check for any missing values in full dataset
-colSums(is.na(df))
-
-# Drop rows with missing values (safe for modeling)
-df_clean <- na.omit(df)
-
-# Re-split cleaned dataset into training and testing
-set.seed(123)
-splitIndex <- createDataPartition(df_clean$target, p = 0.7, list = FALSE)
-train <- df_clean[splitIndex, ]
-test <- df_clean[-splitIndex, ]
-
-# Confirm no missing values
-stopifnot(!any(is.na(train)), !any(is.na(test)))
+# Ensure numeric features are scaled — already done with preProcess() earlier
 
 # Train linear SVM
 svm_model <- svm(target ~ ., data = train, kernel = "linear", probability = TRUE)
@@ -270,67 +391,97 @@ test_target <- factor(test$target, levels = levels(test$target))
 # Ensure lengths match
 stopifnot(length(svm_preds) == length(test_target))
 
-# Evaluate
+# Evaluate performance
 confusionMatrix(svm_preds, test_target)
 ```
+
+The support vector machine (SVM) model achieved an accuracy of 83.33% (95% CI: 74.0%–90.4%), significantly higher than the no-information rate of 54.44% (p < .001). Sensitivity and specificity were 85.71% and 80.49%, respectively, indicating that the model performed well in detecting both the absence and presence of heart disease. The balanced accuracy was 83.10%, and Cohen’s kappa (k = 0.66) demonstrated substantial agreement beyond chance.
 
 ### k-Nearest Neighbours
 
 ```{r}
-# Load necessary library
+# Load required libraries
 library(class)
 library(caret)
 
-# Prepare data: separate predictors and target
+# Prepare predictor matrices (drop 'target' column)
 train_x <- train[, setdiff(names(train), "target")]
-test_x <- test[, setdiff(names(test), "target")]
-train_y <- train$target
-test_y <- test$target
+test_x  <- test[, setdiff(names(test), "target")]
 
-# Convert predictors to numeric
+# Convert predictors to numeric (required for distance calculation)
 train_x <- data.frame(lapply(train_x, as.numeric))
-test_x <- data.frame(lapply(test_x, as.numeric))
+test_x  <- data.frame(lapply(test_x, as.numeric))
 
-# Convert target to factor
-train_y <- factor(train_y, levels = c("No_Disease", "Disease"))
-test_y <- factor(test_y, levels = c("No_Disease", "Disease"))
+# Extract target vectors and ensure consistent factor levels
+train_y <- factor(train$target, levels = c("No_Disease", "Disease"))
+test_y  <- factor(test$target, levels = c("No_Disease", "Disease"))
 
-# Run k-NN classification (k = 5)
+# Run k-NN classifier (k = 5)
 knn_preds <- knn(train = train_x, test = test_x, cl = train_y, k = 5)
 
-# Evaluate model
+# Evaluate performance
 confusionMatrix(knn_preds, test_y)
 ```
 
+The k-nearest neighbors (k-NN) with k = 5 model achieved the highest overall accuracy of 85.56% (95% CI: 76.6%–92.1%) across all models tested, significantly exceeding the no-information rate of 54.44% (p < .001). The model showed excellent sensitivity (89.80%) and strong specificity (80.49%), with a balanced accuracy of 85.14%. Cohen’s kappa (k = 0.71) indicated substantial agreement beyond chance, suggesting robust overall model performance.
+
+### Gradient Boosting Machine (GBM)
+
 ```{r}
-# Load package
+# Load required packages
 library(gbm)
 library(caret)
 
-# Ensure target is numeric: 0 = No Disease, 1 = Disease
+# Use the same preprocessed train/test split
 train_gbm <- train
-test_gbm <- test
+test_gbm  <- test
+
+# Convert target to binary numeric: 0 = No_Disease, 1 = Disease
 train_gbm$target <- ifelse(train_gbm$target == "Disease", 1, 0)
-test_gbm$target <- ifelse(test_gbm$target == "Disease", 1, 0)
+test_gbm$target  <- ifelse(test_gbm$target == "Disease", 1, 0)
 
 # Train GBM model
 set.seed(123)
-gbm_model <- gbm(target ~ ., 
-                 data = train_gbm, 
-                 distribution = "bernoulli", 
-                 n.trees = 100, 
-                 interaction.depth = 3, 
-                 cv.folds = 5, 
-                 verbose = FALSE)
+gbm_model <- gbm(
+  formula = target ~ .,
+  data = train_gbm,
+  distribution = "bernoulli",
+  n.trees = 100,
+  interaction.depth = 3,
+  cv.folds = 5,
+  verbose = FALSE
+)
 
-# Predict probabilities on test set
-gbm_probs <- predict(gbm_model, test_gbm, n.trees = 100, type = "response")
+# Predict probabilities on the test set
+gbm_probs <- predict(gbm_model, newdata = test_gbm, n.trees = 100, type = "response")
 
-# Convert probabilities to binary class predictions
+# Convert probabilities to class predictions (threshold = 0.5)
 gbm_preds <- ifelse(gbm_probs > 0.5, 1, 0)
-gbm_preds <- factor(gbm_preds, levels = c(0, 1))
-actual <- factor(test_gbm$target, levels = c(0, 1))
 
-# Evaluate model performance
+# Convert to factor with correct levels
+gbm_preds <- factor(gbm_preds, levels = c(0, 1))
+actual    <- factor(test_gbm$target, levels = c(0, 1))
+
+# Evaluate performance
 confusionMatrix(gbm_preds, actual)
 ```
+The gradient boosting machine (GBM) classifier was trained to detect the presence of heart disease using 100 trees and a depth of 3. The model achieved an accuracy of 82.22% (95% CI: 72.7%–89.5%), significantly outperforming the no-information rate of 54.44% (p < .001). The model demonstrated strong sensitivity (83.67%) and specificity (80.49%), resulting in a balanced accuracy of 82.08%. Cohen’s kappa (k = 0.64) indicated substantial agreement beyond chance.
+
+```{r}
+### Final Model Comparison Table
+
+library(knitr)
+
+model_comparison <- data.frame(
+  Model = c("k-NN (k = 5)", "Logistic Regression", "SVM (Linear)", "GBM", "Random Forest", "Decision Tree"),
+  Accuracy = c(0.8556, 0.8444, 0.8333, 0.8222, 0.8111, 0.7111),
+  Balanced_Accuracy = c(0.8514, 0.8432, 0.8310, 0.8208, 0.8046, 0.6989),
+  Kappa = c(0.7071, 0.6864, 0.6633, 0.6416, 0.6154, 0.4058),
+  Sensitivity = c(0.8980, 0.8571, 0.8571, 0.8367, 0.8776, 0.8367),
+  Specificity = c(0.8049, 0.8293, 0.8049, 0.8049, 0.7317, 0.5610)
+)
+
+kable(model_comparison, caption = "Comparison of Model Performance Metrics")
+```
+
+Across all models tested, the k-nearest neighbors (k-NN) classifier with k = 5 demonstrated the best overall performance, achieving the highest accuracy (85.56%) and balanced accuracy (85.14%) among the models. Logistic regression and SVM also performed very well, offering strong interpretability alongside robust predictive power. Ensemble methods such as GBM and Random Forest yielded stable results, particularly in detecting non-disease cases, though they did not outperform the simpler models. Decision trees showed the weakest specificity, limiting their reliability in clinical settings. Ultimately, the k-NN model offers an excellent balance of sensitivity and specificity, making it a strong candidate for early heart disease risk classification in this dataset.
