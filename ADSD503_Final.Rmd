@@ -590,7 +590,7 @@ log_preds <- predict(log_tuned, newdata = test_data)
 confusionMatrix(log_preds, test_data$target)
 ```
 
-Among the models tested, the tuned logistic regression model (ridge regularization with λ = 0.0167) achieved the highest overall test accuracy at 85.6% (95% CI: 76.6% – 92.1%), with a balanced accuracy of 85.3%, a sensitivity of 82.9%, and a specificity of 87.8%. This represents a performance gain over the basic logistic regression model, which had a slightly lower accuracy of 84.4%, a balanced accuracy of 84.3%, and a kappa of 0.686, compared to 0.708 for the tuned version.
+Among the models tested, the tuned logistic regression model (ridge regularization with $\lambda$ = 0.0167) achieved the highest overall test accuracy at 85.6% (95% CI: 76.6% – 92.1%), with a balanced accuracy of 85.3%, a sensitivity of 82.9%, and a specificity of 87.8%. This represents a performance gain over the basic logistic regression model, which had a slightly lower accuracy of 84.4%, a balanced accuracy of 84.3%, and a kappa of 0.686, compared to 0.708 for the tuned version.
 
 The default k-NN model (k = 5) matched the tuned logistic regression in test accuracy at 85.6%, but showed slightly lower specificity (80.5%) and kappa (0.707). After tuning, k-NN with k = 15 achieved 80.0% (95% CI: 70.3% – 87.7%) accuracy, suggesting more stable performance across cross-validation folds but a modest drop on unseen data. While both classifiers performed well, the regularized logistic model ultimately offered the most consistent balance of interpretability, sensitivity, and specificity, making it well suited for early disease classification.
 
