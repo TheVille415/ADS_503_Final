@@ -290,6 +290,8 @@ print(prop.table(table(train$target)))
 cat("\nTesting set class distribution:\n")
 print(prop.table(table(test$target)))
 ```
+## Machine Learning
+This dataset contains a mix of categorical, integer, and real-valued features describing patient demographics and clinical test results. Because our goal is to predict whether a patient has heart disease (a binary classification task), we selected a range of supervised classification models. These include logistic regression, decision trees, random forests, support vector machines, k-nearest neighbors, and gradient boosting.
 
 ### Logisitc regression model
 
@@ -485,3 +487,110 @@ kable(model_comparison, caption = "Comparison of Model Performance Metrics")
 ```
 
 Across all models tested, the k-nearest neighbors (k-NN) classifier with k = 5 demonstrated the best overall performance, achieving the highest accuracy (85.56%) and balanced accuracy (85.14%) among the models. Logistic regression and SVM also performed very well, offering strong interpretability alongside robust predictive power. Ensemble methods such as GBM and Random Forest yielded stable results, particularly in detecting non-disease cases, though they did not outperform the simpler models. Decision trees showed the weakest specificity, limiting their reliability in clinical settings. Ultimately, the k-NN model offers an excellent balance of sensitivity and specificity, making it a strong candidate for early heart disease risk classification in this dataset.
+
+## Apply Hyperparameter Tuning
+
+To improve model performance, hyperparameter tuning will be performed on the top-performing models (k-NN and Logistic Regression). This process aims to determine whether optimized parameters can lead to improved accuracy and overall model metrics.
+
+### Tuning k for k-NN
+```{r}
+# Load required libraries
+library(caret)
+library(class)
+
+# Prepare the data (already preprocessed, scaled, and cleaned)
+train_y <- train$target
+test_y <- test$target
+
+# Convert predictors to numeric
+train_x <- data.frame(lapply(train[, setdiff(names(train), "target")], as.numeric))
+test_x <- data.frame(lapply(test[, setdiff(names(test), "target")], as.numeric))
+
+# Combine for caret::train
+train_data <- cbind(train_x, target = train_y)
+
+# Set up cross-validation
+ctrl <- trainControl(method = "cv", number = 10, classProbs = FALSE)
+
+# Define grid of k values (odd to avoid ties)
+knn_grid <- expand.grid(k = seq(1, 25, by = 2))
+
+# Train model using caret
+set.seed(123)
+knn_tuned <- train(
+  target ~ .,
+  data = train_data,
+  method = "knn",
+  trControl = ctrl,
+  tuneGrid = knn_grid,
+  metric = "Accuracy"  # Or use "Kappa" or "ROC" if classProbs=TRUE
+)
+
+# Plot results
+plot(knn_tuned)
+
+# Evaluate on test set using best k
+best_k <- knn_tuned$bestTune$k
+cat("Best k:", best_k, "\n")
+
+knn_preds <- knn(train = train_x, test = test_x, cl = train_y, k = best_k)
+confusionMatrix(knn_preds, test_y)
+```
+```{r}
+# k=15 looked the highest so we are 
+knn_tuned$results[knn_tuned$results$k == 15, ]
+```
+
+A grid search was conducted to tune the number of neighbors (k) in the k-NN model using 10-fold cross-validation. Accuracy peaked at k = 15, achieving a mean CV accuracy of 84.5% (SD = 0.074). The tuned model was then evaluated on the test set, where it achieved 80.0% accuracy (95% CI: 70.3% – 87.7%), with a balanced accuracy of 79.2%, sensitivity of 87.8%, and specificity of 70.7%. Compared to the untuned model (k = 5, 85.6% test accuracy), the tuned model provided a more stable estimate, though at the cost of slightly lower specificity.
+
+### Logistic Regression with Regularization 
+
+```{r}
+# Load required libraries
+library(caret)
+library(glmnet)
+
+# Convert factor target to numeric (caret expects numeric for glmnet)
+train$target <- ifelse(train$target == "Disease", 1, 0)
+test$target <- ifelse(test$target == "Disease", 1, 0)
+
+# Set up training control
+ctrl <- trainControl(method = "cv", number = 10, classProbs = TRUE, summaryFunction = twoClassSummary)
+
+# Create tuning grid
+grid <- expand.grid(
+  alpha = c(0, 0.5, 1),       # 0 = ridge, 1 = lasso, 0.5 = elastic net
+  lambda = 10^seq(-4, 1, length = 10) # Try a wide range of penalties
+)
+
+# caret needs target as factor with names like "yes"/"no" or "Class1"/"Class2"
+train_data <- train
+train_data$target <- factor(ifelse(train_data$target == 1, "Disease", "No_Disease"))
+
+# Train model
+set.seed(123)
+log_tuned <- train(
+  target ~ .,
+  data = train_data,
+  method = "glmnet",
+  family = "binomial",
+  tuneGrid = grid,
+  metric = "ROC",  # You can also use "Accuracy"
+  trControl = ctrl
+)
+
+# View the best alpha and lambda
+print(log_tuned$bestTune)
+
+# Predict on test set
+test_data <- test
+test_data$target <- factor(ifelse(test_data$target == 1, "Disease", "No_Disease"))
+
+log_preds <- predict(log_tuned, newdata = test_data)
+confusionMatrix(log_preds, test_data$target)
+```
+
+Among the models tested, the tuned logistic regression model (ridge regularization with λ = 0.0167) achieved the highest overall test accuracy at 85.6% (95% CI: 76.6% – 92.1%), with a balanced accuracy of 85.3%, a sensitivity of 82.9%, and a specificity of 87.8%. This represents a performance gain over the basic logistic regression model, which had a slightly lower accuracy of 84.4%, a balanced accuracy of 84.3%, and a kappa of 0.686, compared to 0.708 for the tuned version.
+
+The default k-NN model (k = 5) matched the tuned logistic regression in test accuracy at 85.6%, but showed slightly lower specificity (80.5%) and kappa (0.707). After tuning, k-NN with k = 15 achieved 80.0% (95% CI: 70.3% – 87.7%) accuracy, suggesting more stable performance across cross-validation folds but a modest drop on unseen data. While both classifiers performed well, the regularized logistic model ultimately offered the most consistent balance of interpretability, sensitivity, and specificity, making it well suited for early disease classification.
+
