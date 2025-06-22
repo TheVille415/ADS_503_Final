@@ -8,7 +8,6 @@ This project aims to develop a predictive model to determine the presence of hea
 
 - **Source**: [UCI Machine Learning Repository - Heart Disease Dataset](https://archive.ics.uci.edu/dataset/45/heart+disease)
 - **Dataset**: `processed.cleveland.data` from the [UCI Machine Learning Repository](https://archive.ics.uci.edu/ml/datasets/heart+Disease)
-- Records: 303 patient entries
 - **Instances**: 303  
 - **Attributes**: 14 (including the target variable)  
 - **Target Variable**: `num` (0 indicates no presence of heart disease; 1–4 indicate presence)
