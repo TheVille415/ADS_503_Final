@@ -1,5 +1,8 @@
 # Heart Disease Prediction Using Machine Learning
 
+**Authors**: Saloni Barhate and Jordan Torres  
+**Course**: Applied Data Science (ADS 503) 
+
 ## Overview
 
 This project aims to develop a predictive model to determine the presence of heart disease in patients based on various medical attributes. Utilizing the UCI Heart Disease dataset, we applied machine learning techniques to analyze patient data and predict heart disease outcomes. Multiple classification models were developed and evaluated to identify the most effective approach for early risk assessment.
@@ -7,7 +10,7 @@ This project aims to develop a predictive model to determine the presence of hea
 ## Dataset
 
 - **Source**: [UCI Machine Learning Repository - Heart Disease Dataset](https://archive.ics.uci.edu/dataset/45/heart+disease)
-- **Dataset**: `processed.cleveland.data` from the [UCI Machine Learning Repository](https://archive.ics.uci.edu/ml/datasets/heart+Disease)
+- **Subset Used**: `processed.cleveland.data` from the [UCI Machine Learning Repository](https://archive.ics.uci.edu/ml/datasets/heart+Disease)
 - **Instances**: 303  
 - **Attributes**: 14 (including the target variable)  
 - **Target Variable**: `num` (0 indicates no presence of heart disease; 1–4 indicate presence)
@@ -47,7 +50,9 @@ To build and evaluate machine learning models that accurately predict the presen
    - Specificity  
    - Cohen’s Kappa  
 
-## Results
+## Models and Results
+
+The following models were trained and evaluated
 
 | Model               | Accuracy | Balanced Accuracy | Kappa  | Sensitivity | Specificity |
 |--------------------|----------|-------------------|--------|-------------|-------------|
@@ -58,13 +63,28 @@ To build and evaluate machine learning models that accurately predict the presen
 | Random Forest       | 0.8111   | 0.8046            | 0.6154 | 0.8776      | 0.7317      |
 | Decision Tree       | 0.7111   | 0.6989            | 0.4058 | 0.8367      | 0.5610      |
 
-The **k-NN classifier with k = 5** outperformed all other models, demonstrating the highest accuracy and balanced accuracy. While logistic regression and SVM showed competitive results, k-NN offered the best trade-off between sensitivity and specificity.
+### Hyperparameter Tuning
 
-## Team Members
+- **k-NN**: Optimal `k = 15` achieved 80.0% test accuracy and balanced accuracy of 79.2%
+- **Logistic Regression (glmnet)**: Ridge regression (α = 0, λ = 0.0167) produced the best results with:
+  - Accuracy: 85.56%
+  - Balanced Accuracy: 85.34%
+  - Kappa: 0.7082
+  - Sensitivity: 82.9%, Specificity: 87.8%
+ 
+## Key Insights
 
-- Saloni Barhate  
-- Jordan Torres  
+- The k-NN and regularized logistic regression models both achieved top-tier performance.
+- Simpler models like logistic regression offer strong performance with better interpretability.
+- Ensemble methods (Random Forest and GBM) also performed well but did not significantly outperform simpler classifiers.
+- Features like thalassemia (`thal`), number of major vessels (`ca`), and max heart rate (`thalach`) were most influential in tree-based models.
+ 
+## Requirements
 
+- R (version ≥ 4.0)
+- R packages: `tidyverse`, `caret`, `e1071`, `rpart`, `randomForest`, `gbm`, `VIM`, `glmnet`
+
+  
 ## How to Reproduce
 
 1. Open the R Markdown file: `ADS503_Final.Rmd`  
@@ -75,3 +95,7 @@ The **k-NN classifier with k = 5** outperformed all other models, demonstrating 
 
 - Detrano, R., Janosi, A., Steinbrunn, W., Pfisterer, M., Schmid, J. J., Sandhu, S., ... & Froelicher, V. (1989). International application of a new probability algorithm for the diagnosis of coronary artery disease. *The American Journal of Cardiology*, 64(5), 304–310.
 - Dua, D. & Graff, C. (2019). UCI Machine Learning Repository [https://archive.ics.uci.edu/ml](https://archive.ics.uci.edu/ml)
+
+## License
+
+This project is for academic use only in the University of San Diego's ADS 503 course.
